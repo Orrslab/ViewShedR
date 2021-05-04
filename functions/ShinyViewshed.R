@@ -12,7 +12,7 @@ InstallSourcePcks <- function(pcks){
 }
 
 pcks <- list("dplyr","lubridate","leaflet","leaflet.extras",# "windfarmGA",
-             "htmltools","RSQLite","doParallel",
+             "htmltools","doParallel",
              "raster","tiff","sp","shiny") # a list of external packages to source
 InstallSourcePcks(pcks)
 
@@ -87,7 +87,7 @@ ui = fluidPage(
                   sidebarPanel(
                     fluidRow(
                       column(6, selectInput(inputId="Filename_M",label ="filename",choices = LOSfilesnames,selected = LOSfilesnames[1] )),
-                      column(6, textInput(inputId="mapheight_M", label="Map height on screen",value = "700px"))
+                      column(6, textInput(inputId="mapheight_M", label="Map vertical size  on screen",value = "700px"))
                             ),
                     actionButton("Load_M",label =  "Load file"),
                     uiOutput("ANTControls1_M")
@@ -107,11 +107,11 @@ ui = fluidPage(
             p(),
             h4("INPUT FILE:",align = "center"),
             strong(h4(textOutput("txtOutput2_C"),align = "center")),
-            textInput(inputId="mapheight_C", label="Map height on screen",value = "700px"),
+            textInput(inputId="mapheight_C", label="Map vertical size  on screen",value = "700px"),
             actionButton("recalc_C",label =  "Recalc"),
             uiOutput("ANTControls1_C"),
             fluidRow(
-              column(6, h2(),actionButton("Savecumul",label =  "Save to kml")),
+              column(6, h2(),actionButton("Savecumul",label =  "Save to kmz")),
               column(6, textInput(inputId="cumulFilesave", label="file Name",value = "ComulativeLayer.kmz"))
             ),
             strong(h4(textOutput("savedcumul"),align = "center")),
@@ -130,14 +130,14 @@ ui = fluidPage(
                            p(),
                            h4("INPUT FILE:",align = "center"),
                            strong(h4(textOutput("txtOutput2_I"),align = "center")),
-                           textInput(inputId="mapheight_I", label="Map height on screen",value = "700px"),
+                           textInput(inputId="mapheight_I", label="Map vertical size  on screen",value = "700px"),
                            actionButton("recalc_I",label =  "Recalc"),
                            fluidRow(
                              column(7, uiOutput("ANTControls1_I")),
                              column(5, uiOutput("ANTControls2_I"))
                               ),
                            fluidRow(
-                             column(6, h2(), actionButton("SaveInter",label =  "Save to kml")),
+                             column(6, h2(), actionButton("SaveInter",label =  "Save to kmz")),
                              column(6, textInput(inputId="InterFilesave", label="file Name",value = "IntersectiveLayer.kmz"))
                            ),
                            strong(h4(textOutput("savedinter"),align = "center")),
@@ -201,17 +201,19 @@ server <- function(input, output, session) {
       isolate({
         ANTS.df <<- read.csv(paste0("LOSData/ANTS_",input$Filename_M,".csv"))
         LOSLayers <<- stack(paste0("LOSData/LOSLayers_",input$Filename_M,".gri")) 
-        cr <<- raster(paste0("LOSData/DEM_",input$Filename_M,".gri"))
+        DEM <<- raster(paste0("LOSData/DEM_",input$Filename_M,".gri"))
         antID <- ANTS.df$ID    
           output$ANTControls1_M <- renderUI({
             checkboxGroupInput("antID_M", "Antennas",choiceValues=ANTS.df$ID,choiceNames = paste (ANTS.df$ID,"-",ANTS.df$ANTName),inline = F)})
-        output$ANT_sel <- renderUI({selectInput(inputId="ANT",label ="Antenna",choices = ANTS.df$ID,selected = ANTS.df$ID[1] )})
-        pal <- colorNumeric(palette = "Spectral",domain = seq(min(cr@data@min),max(cr@data@max),length.out = 50))
+        output$ANT_sel <- renderUI({selectInput(inputId="ANT",label ="Antenna",
+                                                choices = setNames(as.list(ANTS.df$ID), paste0(ANTS.df$ID,", ",ANTS.df$ANTName)),
+                                                selected = ANTS.df$ID[1], )})
+        pal <- colorNumeric(palette = "Spectral",domain = seq(min(DEM@data@min),max(DEM@data@max),length.out = 50),reverse = T)
         output$mymap_M      <- renderLeaflet({
             leaflet() %>%
               addProviderTiles('Esri.WorldImagery') %>%
-              addRasterImage(cr,color = pal,  opacity = 0.8) %>%
-              addLegend(pal = pal, values = values(cr),  title = "height") %>%
+              addRasterImage(DEM,color = pal,  opacity = 0.8) %>%
+              addLegend(pal = pal, values = values(DEM),  title = "height") %>%
               addCircles(data=ANTS.df[,], weight = 5, fillOpacity = 1,color = "red",
                          popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),
                                                     ",",ANTS.df$ANTName,
@@ -232,8 +234,8 @@ server <- function(input, output, session) {
         output$mymapL <- renderLeaflet(
           leaflet() %>%
             addProviderTiles('Esri.WorldImagery') %>%
-            addRasterImage(cr,color = pal, opacity = 0.3) %>%
-            addLegend(pal = pal, values = values(cr),  title = "height") %>%
+            addRasterImage(DEM,color = pal, opacity = 0.3) %>%
+            addLegend(pal = pal, values = values(DEM),  title = "height") %>%
             # setView(lng = 35.43, lat = 32.54, zoom = 12) %>%
             addCircles(data=ANTS.df, weight = 5, fillOpacity = 1,color = "red",
                        popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),",",ANTS.df$ANTName)))%>%
@@ -327,7 +329,7 @@ server <- function(input, output, session) {
                        popup = ~htmlEscape(paste0("cannot see: ID=",as.character(ANTS.df$ID[ANT_indeces2_I()]),",",ANTS.df$ANTName[ANT_indeces2_I()])))%>%
             addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F))
         })})
-    })
+    }) 
     observeEvent(input$SaveInter, {
       input$SaveInter
       isolate({
@@ -366,8 +368,8 @@ server <- function(input, output, session) {
         {
           i <- which(ANTS.df$ID==input$ANT)  
           LOSline <- matrix(data = c(input$AntLON,input$transLON+0.0000001,input$AntLAT,input$transLAT),ncol=2)
-          SPline <- spLines(LOSline,crs=crs(cr))
-          LineDEM <- extract(cr,SPline)
+          SPline <- spLines(LOSline,crs=crs(DEM))
+          LineDEM <- extract(DEM,SPline)
           LineDEM <- unlist(LineDEM)
           if(LOSline[3]<LOSline[4]) {LineDEM <- rev(LineDEM)}
           addHight <- c(input$AntALT,input$transALT)
@@ -377,15 +379,16 @@ server <- function(input, output, session) {
           xyzline <- linear(x, observer, target)
           names(xyzline) <- c("LON","LAT","z")
           xyzline$DEM <- LineDEM
-          hightProfile <<- xyzline
+          # hightProfile <<- xyzline
+          vis=ifelse(any(xyzline$z < xyzline$DEM, na.rm = TRUE),"red","green")
           DEMbox <- data.frame(LON=c(min(LOSline[,1]-input$DEMshoulders/111000),max(LOSline[,1]+input$DEMshoulders/111000)),
                                LAT=c(min(LOSline[,2]-input$DEMshoulders/111000),max(LOSline[,2]+input$DEMshoulders/111000)))
           coordinates(DEMbox) <- ~LON+LAT
           proj4string(DEMbox) <- CRS(wgs84)
-          cr_tight <- crop(cr, extent(DEMbox), snap="out")
+          DEM_tight <- crop(DEM, extent(DEMbox), snap="out")
           pal <- colorNumeric(
-            palette = "Spectral",
-            domain = seq(min(cr_tight@data@values),max(cr_tight@data@values),length.out = 50)
+            palette = "Spectral",reverse = T,
+            domain = seq(min(DEM_tight@data@values),max(DEM_tight@data@values),length.out = 50)
           )
           
           output$txtOutput_TRNSASL <- renderText({paste("Transmitter ground height is",LineDEM[length(LineDEM)],"m")    })
@@ -393,18 +396,22 @@ server <- function(input, output, session) {
           
           output$LOSplot <- renderUI({plotOutput("plot1",height =input$mapheight_2 )})
           output$plot1 <- renderPlot({
-            plot(x,LineDEM,type="l", col="green",ylim=c(min(LineDEM),max(c(LineDEM,target[3],observer[3]))))
-            points(c(observer[1],target[1]),c(observer[3],target[3]),type="l")
+            plot(x,LineDEM,type="l", col="black",lwd=4,
+                 ylim=c(min(LineDEM),max(c(LineDEM,target[3],observer[3]))),
+                 xlab = "Longtitude",ylab = "Altitude (m)",cex.lab=1.5, cex.axis=1.5,)
+            points(c(observer[1],target[1]),c(observer[3],target[3]),type="l",col=vis,lwd = 4)
             text(observer[1],(target[3]+observer[3])/2,"ANT")
             text(target[1],(target[3]+observer[3])/2,"TRANS") 
+            legend("bottomleft", legend = c("ground altitude", "direct line"), lty=1, lwd = 4,
+                   col = c("black",vis), text.col = "black", horiz = F, inset = c(0.1, 0.1))
           })
           output$LeafletMAP_2 <- renderUI({leafletOutput("mymapDEM",height =input$mapheight_3 )})
           output$mymapDEM <- renderLeaflet(
             leaflet() %>%
               addProviderTiles('Esri.WorldImagery') %>%
-              addRasterImage(cr_tight,colors = pal, opacity = 0.8) %>%
+              addRasterImage(DEM_tight,colors = pal, opacity = 0.8) %>%
               # setView(lng = 35.43, lat = 32.54, zoom = 12) %>%
-              addLegend(pal = pal, values = cr_tight@data@values,  title = "height") %>% 
+              addLegend(pal = pal, values = DEM_tight@data@values,  title = "height") %>% 
               addCircles(data=ANTS.df, weight = 5, fillOpacity = 1,color = "red",
                          popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),",",ANTS.df$ANTName)))%>%
               addCircles(data=xyzline, weight = 3, fillOpacity = 1,color = "green",

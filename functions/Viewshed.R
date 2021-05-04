@@ -3,7 +3,7 @@ setEnv <- function()
   # install.packages("shiny")
   options(digits = 14) # Makes sure long numbers are not abbreviated.
   pcks <- list("dplyr","lubridate","leaflet","leaflet.extras",# "windfarmGA",
-               "htmltools","RSQLite","doParallel",
+               "htmltools","doParallel",
                "raster","tiff","sp","shiny") # a list of external packages to source
   InstallSourcePcks(pcks)
   # sapply(pcks, require, char = TRUE)        #sourcing these packages
@@ -40,12 +40,12 @@ getDEM <- function(type="file",box,filename=DEM_name,resoluton=NULL)
   proj4string(box) <- CRS(wgs84)
   if (type=="file")
   {imported_raster <- raster(filename)
-   cr <- crop(imported_raster, extent(box), snap="out")
-   print(sprintf("the source resolution is (%3.1fm lat, %3.1fm lon)", res(cr)[1]*111e3,res(cr)[2]*94e3))
+   DEM <- crop(imported_raster, extent(box), snap="out")
+   print(sprintf("the source resolution is (%3.1fm lat, %3.1fm lon)", res(DEM)[1]*111e3,res(DEM)[2]*94e3))
    if (!is.null(resoluton)) { 
      requiredRes=resoluton/111e3  #resolution in degrees
-     cr <- projectRaster(cr,crs=CRS(wgs84),res=requiredRes)
-     print(sprintf("the final resolution is (%3.1fm lat, %3.1fm lon)", res(cr)[1]*111e3,res(cr)[2]*94e3))
+     DEM <- projectRaster(DEM,crs=CRS(wgs84),res=requiredRes)
+     print(sprintf("the final resolution is (%3.1fm lat, %3.1fm lon)", res(DEM)[1]*111e3,res(DEM)[2]*94e3))
    }
   }
   if (type=="web")
@@ -54,19 +54,19 @@ getDEM <- function(type="file",box,filename=DEM_name,resoluton=NULL)
     # getData("alt", country = 'ISR')
     DEM1 <- getData('SRTM', lon=box$lon[1], lat=box$lat[1])
     DEM2 <- getData('SRTM', lon=box$lon[2], lat=box$lat[2])
-    cr <- merge(DEM1,DEM2)
-    cr <- crop(cr, extent(box), snap="out")
-    print(sprintf("the source resolution is (%3.1fm lat, %3.1fm lon)", res(cr)[1]*111e3,res(cr)[2]*94e3))
+    DEM <- merge(DEM1,DEM2)
+    DEM <- crop(DEM, extent(box), snap="out")
+    print(sprintf("the source resolution is (%3.1fm lat, %3.1fm lon)", res(DEM)[1]*111e3,res(DEM)[2]*94e3))
     if (!is.null(resoluton)) { 
       requiredRes=resoluton/111e3  #resolution in degrees
-      cr <- projectRaster(cr,crs=CRS(wgs84),res=requiredRes)
-      print(sprintf("the final resolution is (%3.1fm lat, %3.1fm lon)", res(cr)[1]*111e3,res(cr)[2]*94e3))
+      DEM <- projectRaster(DEM,crs=CRS(wgs84),res=requiredRes)
+      print(sprintf("the final resolution is (%3.1fm lat, %3.1fm lon)", res(DEM)[1]*111e3,res(DEM)[2]*94e3))
     }
   }
-  return(cr)
+  return(DEM)
 }
 
-setANTS <- function(ANTfilename,cr,visual=T)
+setANTS <- function(ANTfilename,DEM,visual=T)
 {ANTS.df <- read.csv(ANTfilename)
   print(sprintf("Antenna file contains %i towers with variables: ",nrow(ANTS.df)))
   print(names(ANTS.df))
@@ -74,18 +74,18 @@ setANTS <- function(ANTfilename,cr,visual=T)
   coordinates(ANTS.df) <- ~LON+LAT
   proj4string(ANTS.df) <- CRS(wgs84)
   ANTS <- SpatialPoints(ANTS.df, proj4string=CRS(wgs84))
-  ANTS.df$GroundASL <- extract(cr,ANTS)
+  ANTS.df$GroundASL <- extract(DEM,ANTS)
   return(ANTS.df)
   }
 
-viewSetup <- function(ANTS.df,cr)
+viewSetup <- function(ANTS.df,DEM)
 {
-  pal <- colorNumeric(palette = "Spectral",domain = seq(min(cr@data@min),max(cr@data@max),length.out = 50))
+  pal <- colorNumeric(palette = "Spectral",domain = seq(min(DEM@data@min),max(DEM@data@max),length.out = 50))
   print(as.data.frame(ANTS.df))
   ll<-leaflet() %>% 
     addProviderTiles('Esri.WorldImagery') %>%
-    addRasterImage(cr,color = pal,  opacity = 0.4) %>%
-    addLegend(pal = pal, values = values(cr),  title = "height") %>%
+    addRasterImage(DEM,color = pal,  opacity = 0.4) %>%
+    addLegend(pal = pal, values = values(DEM),  title = "height") %>%
     addCircles(data=ANTS.df, weight = 5, fillOpacity = 1,color = "red",
                popup = ~htmlEscape(paste0("ANTName=",ANTS.df$ANTName,
                                           ", ID=",as.character(ANTS.df$ID),
@@ -95,7 +95,7 @@ viewSetup <- function(ANTS.df,cr)
   ll
 }
 
-SerialComputeViewShed <- function(layername,cr,ANTS.df,transAltlist=2,ANTlist=NULL)
+SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL)
 {
   if(is.null(ANTlist))
     ANTlist <-as.character(ANTS.df$ID)
@@ -110,7 +110,7 @@ SerialComputeViewShed <- function(layername,cr,ANTS.df,transAltlist=2,ANTlist=NU
       print(ANT_ID)
       start.time <- Sys.time()
       ANT_index <- as.numeric(which(ANTS.df$ID==ANT_ID))
-      res <- viewshed(r =cr, shape=box, turbine_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt) #h1 is antena's hight, h2 is transmitor's hight
+      res <- viewshed(r =DEM, shape=box, turbine_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt) #h1 is antena's hight, h2 is transmitor's hight
       if(FirstIter) LOSgrid <- res[[2]]
       LOSlogical <- res[[1]][1,]
       # collecting los in one list:
@@ -135,14 +135,14 @@ SerialComputeViewShed <- function(layername,cr,ANTS.df,transAltlist=2,ANTlist=NU
     str_name <- paste0("TransAlt",as.character(transAlt),"m_", layername) #Res30m_24_33
     writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
     write.csv(ANTS.df[which(ANTS.df$ID %in% ANTlist),],paste0("LOSData/ANTS_",str_name,".csv"))
-    writeRaster(cr,paste0("LOSData/DEM_",str_name))
+    writeRaster(DEM,paste0("LOSData/DEM_",str_name))
     print(paste("saved file",str_name))
     # # this file must be accompeneid by the DEM and ANTS file
   }
   
 }
 
-ParallelComputeViewShed <- function(layername,cr,ANTS.df,transAltlist=2,ANTlist=NULL)
+ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL)
 {
   
   if(is.null(ANTlist))
@@ -160,7 +160,7 @@ ParallelComputeViewShed <- function(layername,cr,ANTS.df,transAltlist=2,ANTlist=
       setEnv()
       ANT_ID <- ANTS.df$ID[i]
       ANT_index <- as.numeric(which(ANTS.df$ID==ANT_ID))
-      res <- viewshed(r =cr, shape=box, turbine_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt) #h1 is antena's hight, h2 is transmitor's hight
+      res <- viewshed(r =DEM, shape=box, turbine_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt) #h1 is antena's hight, h2 is transmitor's hight
       LOSgrid <- res[[2]]
       LOSlogical <- res[[1]][1,]
       df <- data.frame(value = LOSlogical, LON = LOSgrid[,1], LAT = LOSgrid[,2])
@@ -177,7 +177,7 @@ ParallelComputeViewShed <- function(layername,cr,ANTS.df,transAltlist=2,ANTlist=
   str_name <- paste0("TransAlt",as.character(transAlt),"m_",layername)
   writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
   write.csv(ANTS.df[which(ANTS.df$ID %in% ANTlist),],paste0("LOSData/ANTS_",str_name,".csv"))
-  writeRaster(cr,paste0("LOSData/DEM_",str_name))
+  writeRaster(DEM,paste0("LOSData/DEM_",str_name))
   print(paste("saved file",str_name))
   # # this file must be accompanied by the DEM and ANTS file
 }
@@ -214,7 +214,7 @@ AddRmAnts <- function (final_name,base_str_name,add_str_name=NULL,ANTID2rm=NULL,
   base_str_name #<- paste0("TransAlt",as.character(transAlt), "m_",base_str_name)
   add_str_name #<- paste0("TransAlt",as.character(transAlt), "m_",add_str_name)
   LOSLayers <- stack(paste0("LOSData/LOSLayers_",base_str_name,".gri"))
-  cr <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
+  DEM <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
   ANTS.df <- read.csv(paste0("LOSData/ANTS_",base_str_name,".csv")) %>% 
     dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
   
@@ -264,7 +264,7 @@ AddRmAnts <- function (final_name,base_str_name,add_str_name=NULL,ANTID2rm=NULL,
   print(sprintf("saving to files %s :",final_name))
   writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",final_name),overwrite=T) 
   write.csv(ANTS.df,paste0("LOSData/ANTS_",final_name,".csv"))
-  writeRaster(cr,paste0("LOSData/DEM_",final_name),overwrite=T) 
+  writeRaster(DEM,paste0("LOSData/DEM_",final_name),overwrite=T) 
 }
 
 UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL,newANTname=NULL)
@@ -290,7 +290,7 @@ UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL
   }
   base_str_name #<- paste0("TransAlt",as.character(transAlt), "m_",base_str_name)
   LOSLayers <- stack(paste0("LOSData/LOSLayers_",base_str_name,".gri")) # write the file
-  cr <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
+  DEM <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
   ANTS.df <- read.csv(paste0("LOSData/ANTS_",base_str_name,".csv")) %>% 
              dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
   
@@ -318,7 +318,7 @@ UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL
   print(sprintf("saving to files %s :",final_name))
   writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",final_name),overwrite=T) 
   write.csv(ANTS.df,paste0("LOSData/ANTS_",final_name,".csv"))
-  writeRaster(cr,paste0("LOSData/DEM_",final_name),overwrite=T) 
+  writeRaster(DEM,paste0("LOSData/DEM_",final_name),overwrite=T) 
 }
 
 

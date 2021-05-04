@@ -13,26 +13,26 @@ box <- data.frame(lat=c(32.38,32.68),lon=c(35.27, 35.68))
 #if you have available DEM faile, enter its path (otherwise you can automatically download)
 DEM_name<-"DEM_Files/DEM_Harod.tif" # DEM on geographic grid
 # path for the antenna location csv file, the file must contain the variables: "ANTName","ID","LAT","LON","Towerheight"
-ANTfilename <- "ANTLOC/HarodANTSLoc.csv"
+ANTfilename <- "ANT_Table_Files/HarodANTSLoc.csv"
 
 # ------ Antenna Positions ---------------
-cr <- getDEM(type="file",box,filename=DEM_name) # retrieve and cut DEM from "tif" file
-# cr <- getDEM(type="web",box) # retrieve and cut DEM from the web
-ANTS.df <- setANTS(ANTfilename,cr)
-viewSetup(ANTS.df,cr)
+DEM <- getDEM(type="file",box,filename=DEM_name) # retrieve and cut DEM from "tif" file
+# DEM <- getDEM(type="web",box) # retrieve and cut DEM from the web
+ANTS.df <- setANTS(ANTfilename,DEM)
+viewSetup(ANTS.df,DEM)
 
 # ------ Calculating viewshed for all Antennas serial version --------------------
 # ANT_ID <- "23"
 ANTlist <-as.character(ANTS.df$ID)
-ANTlist <- c("1","2","3","4","5","6")
+ANTlist <- c("1")#,"2","3","4","5","6")
 transAlts <- c(0.3, 2, 5,10)
 Layername <- "Res900a1-6"
-SerialComputeViewShed(layername=Layername,cr,ANTS.df,transAlts,ANTlist=ANTlist)
+SerialComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist)
 
 # ------ Calculating viewshed for all Antennas parallel version--------------------
 detectCores()
 registerDoParallel(3)
-ParallelComputeViewShed(layername=Layername,cr,ANTS.df,transAlts,ANTlist=ANTlist)
+ParallelComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist)
 
 # ------  substituting / adding a single layer in a LOSLayers file
 
