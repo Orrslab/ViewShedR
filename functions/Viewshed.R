@@ -1,6 +1,10 @@
 setEnv <- function()
 {
   # install.packages("shiny")
+  Rver <- R.version
+  if (as.numeric(Rver$major)<4)
+    stop(sprintf("The package requires version 4.0.0 or later. You have %s installed, please update !!",Rver$version.string))
+  
   options(digits = 14) # Makes sure long numbers are not abbreviated.
   pcks <- list("dplyr","lubridate","leaflet","leaflet.extras",# "windfarmGA",
                "htmltools","doParallel",

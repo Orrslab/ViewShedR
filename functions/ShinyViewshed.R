@@ -1,9 +1,13 @@
+Rver <- R.version
+if (as.numeric(Rver$major)<4)
+  stop(sprintf("The package requires version 4.0.0 or later. You have %s installed, please update !!",Rver$version.string))
 
 InstallSourcePcks <- function(pcks){
   for( i in pcks ){
     #  require returns TRUE invisibly if it was able to load package
     if( ! require( i , character.only = TRUE ) ){
       #  If package was not able to be loaded then re-install
+      print(sprintf("Package %s not installed, downloading and installing it now!",i))
       install.packages( i , dependencies = TRUE )
       #  Load package after installing
       require( i , character.only = TRUE )
