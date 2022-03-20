@@ -1,0 +1,26 @@
+[general]
+creator=R package 'raster'
+created=2022-02-17 22:42:01
+[georeference]
+nrows=684
+ncols=1305
+xmin=-83.1113693653513
+ymin=24.5465213724865
+xmax=-82.7586666626486
+ymax=24.7313862373513
+projection=+proj=longlat +datum=WGS84 +no_defs
+[data]
+datatype=FLT4S
+byteorder=little
+nbands=1
+bandorder=BIL
+categorical=FALSE
+minvalue=-55.8385854819797
+maxvalue=5
+nodatavalue=-3.4e+38
+[legend]
+legendtype=
+values=
+color=
+[description]
+layername=Tortugas_DEM_filled84_5m
