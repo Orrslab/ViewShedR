@@ -11,8 +11,8 @@ setEnv <- function()
                "raster","tiff","sp","shiny") # a list of external packages to source
   InstallSourcePcks(pcks)
   # sapply(pcks, require, char = TRUE)        #sourcing these packages
-  itm<<-"+init=epsg:2039 +proj=tmerc +lat_0=31.73439361111111 +lon_0=35.20451694444445 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-48,55,52,0,0,0,0 +units=m +no_defs"
-  wgs84 <<- "+proj=longlat +ellps=WGS84 +datum=WGS84"
+  # itm<<-"+init=epsg:2039" # +proj=tmerc +lat_0=31.73439361111111 +lon_0=35.20451694444445 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-48,55,52,0,0,0,0 +units=m +no_defs"
+  wgs84 <<- "+proj=longlat +datum=WGS84"
 }
 
 InstallSourcePcks <- function(pcks){
@@ -75,10 +75,16 @@ setANTS <- function(ANTfilename,DEM,visual=T)
   print(sprintf("Antenna file contains %i towers with variables: ",nrow(ANTS.df)))
   print(names(ANTS.df))
   print(sprintf("the file mast contain the variables \"ANTName\",\"ID\", \"LAT\", \"LON\",\"Towerheight\""))
+  if (length(which(is.na(ANTS.df$LAT)&is.na(ANTS.df$LON))>0))
+    print("deleting some NA rows")
+  ANTS.df <- ANTS.df[which(!is.na(ANTS.df$LAT)&!is.na(ANTS.df$LON)),]
   coordinates(ANTS.df) <- ~LON+LAT
   proj4string(ANTS.df) <- CRS(wgs84)
   ANTS <- SpatialPoints(ANTS.df, proj4string=CRS(wgs84))
   ANTS.df$GroundASL <- extract(DEM,ANTS)
+  if (!('AntRadius' %in% names(ANTS.df)))
+  {ANTS.df$AntRadius <- NA
+    print('maximum Antenna detection range (AntRadius) is missing - ignoring max range')}
   return(ANTS.df)
   }
 
@@ -95,11 +101,12 @@ viewSetup <- function(ANTS.df,DEM)
                                           ", ID=",as.character(ANTS.df$ID),
                                           ", Towerheight=",as.character(round(ANTS.df$Towerheight)),
                                           ", GroundASL=",as.character(round(ANTS.df$GroundASL)) 
-               ))) # %>%
+               ))) %>% 
+    addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F))# %>%
   ll
 }
 
-SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL)
+SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL,includeCurv=FALSE,seaLevel=NA)
 {
   if(is.null(ANTlist))
     ANTlist <-as.character(ANTS.df$ID)
@@ -113,10 +120,12 @@ SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=N
     {
       print(ANT_ID)
       start.time <- Sys.time()
-      ANT_index <- as.numeric(which(ANTS.df$ID==ANT_ID))
-      res <- viewshed(r =DEM, shape=box, turbine_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt) #h1 is antena's hight, h2 is transmitor's hight
-      if(FirstIter) LOSgrid <- res[[2]]
-      LOSlogical <- res[[1]][1,]
+      ANTS.df1 <- ANTS.df
+      ANTlist1 <- ANTlist
+      ANT_index <- as.numeric(which(ANTS.df1$ID==ANT_ID))
+      res <- viewshed(r =DEM, tower_locs = ANTS[ANT_index,],  h1=ANTS.df1$Towerheight[ANT_index], h2=transAlt,maxRange=ANTS.df1$AntRadius[ANT_index],includeCurv=includeCurv,seaLevel=seaLevel) #h1 is antena's hight, h2 is transmitor's hight
+      if(FirstIter) LOSgrid <- res$Raster_POI
+      LOSlogical <- res$Result
       # collecting los in one list:
       df <- data.frame(value = LOSlogical, LON = LOSgrid[,1], LAT = LOSgrid[,2])
       s <- SpatialPixelsDataFrame(df[,c('LON', 'LAT')], data = df)
@@ -128,17 +137,43 @@ SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=N
         LOSLayers <- addLayer(LOSLayers,r)
       names(LOSLayers)[nlayers(LOSLayers)] <-   sprintf("ANT%s",ANT_ID)
       LOSLayers[[nlayers(LOSLayers)]]@title <- sprintf("ANT%s, coords: %f,%f, antAlt(Towerheight)=%.3fm, trnasAlt=%.3fm,",
-                                                       ANT_ID,ANTS[ANT_index,]@coords[1],ANTS[ANT_index,]@coords[2],ANTS.df$Towerheight[ANT_index],transAlt)
+                                                       ANT_ID,ANTS[ANT_index,]@coords[1],ANTS[ANT_index,]@coords[2],ANTS.df1$Towerheight[ANT_index],transAlt)
       FirstIter <- FALSE
       end.time <- Sys.time()
       print(time.taken <- end.time - start.time)
     }
     
+    if(!is.na(seaLevel)) # Creating a Layer indicating invalid locations (calculated height is above water or below ground)
+    {
+      InvLayer <- DEM
+      invalidGridPoints <- which(getValues(DEM)+abs(transAlt) > seaLevel)
+      validGridPoints <- which(getValues(DEM)+abs(transAlt) < seaLevel)
+      InvLayer[which(is.na(getValues(DEM)))] <- F
+      InvLayer[invalidGridPoints] <- T
+      InvLayer[validGridPoints] <- F
+      InvLayer <- crop(InvLayer,extent(LOSLayers))
+      LOSLayers <- addLayer(LOSLayers,InvLayer)
+      names(LOSLayers)[nlayers(LOSLayers)] <-   sprintf("InvalidCalc")
+      LOSLayers[[nlayers(LOSLayers)]]@title <- sprintf("Invalid Area for transmitter altitude =%.3fm and sea level= %.3fm",seaLevel,transAlt)
+      ANTS.df1 <- as.data.frame(ANTS.df1)
+      invalidLayer <- as.data.frame(ANTS.df1[1,])
+      invalidLayer$ID <- 999
+      invalidLayer$Towerheight <- seaLevel
+      invalidLayer$GroundASL <- transAlt
+      invalidLayer$ANTName <- "Invalid Area"
+      invalidLayer$LON <- 0
+      invalidLayer$LAT <- 0
+      ANTS.df1 <- rbind(ANTS.df1,invalidLayer)
+      ANTlist1 <- cbind(ANTlist1,'999')
+      
+    }
+
+    
     # -----------------   Saving viewshed raster files -----------------------------
     names(LOSLayers)
     str_name <- paste0("TransAlt",as.character(transAlt),"m_", layername) #Res30m_24_33
     writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
-    write.csv(ANTS.df[which(ANTS.df$ID %in% ANTlist),],paste0("LOSData/ANTS_",str_name,".csv"))
+    write.csv(ANTS.df1[which(ANTS.df1$ID %in% ANTlist1),],paste0("LOSData/ANTS_",str_name,".csv"))
     writeRaster(DEM,paste0("LOSData/DEM_",str_name))
     print(paste("saved file",str_name))
     # # this file must be accompeneid by the DEM and ANTS file
@@ -146,7 +181,7 @@ SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=N
   
 }
 
-ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL)
+ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL,includeCurv=FALSE,seaLevel=NA)
 {
   
   if(is.null(ANTlist))
@@ -156,15 +191,17 @@ ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist
 {
   print(sprintf("trasmittor height =%f",transAlt))
   start.time <- Sys.time()
+  ANTS.df1 <- ANTS.df
+  ANTlist1 <- ANTlist
   r <- raster()
   LOSLayers <- stack(r)
-  LOSLayers <- foreach(i = 1:length(ANTlist), .combine=addLayer) %dopar% 
+  LOSLayers <- foreach(i = 1:length(ANTlist1), .combine=addLayer) %dopar% 
     {
       source('functions/Viewshed.R')
       setEnv()
-      ANT_ID <- ANTS.df$ID[i]
-      ANT_index <- as.numeric(which(ANTS.df$ID==ANT_ID))
-      res <- viewshed(r =DEM, shape=box, turbine_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt) #h1 is antena's hight, h2 is transmitor's hight
+      ANT_ID <- ANTS.df1$ID[i]
+      ANT_index <- as.numeric(which(ANTS.df1$ID==ANT_ID))
+      res <- viewshed(r =DEM, tower_locs = ANTS[ANT_index,],  h1=ANTS.df1$Towerheight[ANT_index], h2=transAlt,maxRange=ANTS.df1$AntRadius[ANT_index],includeCurv=includeCurv,seaLevel=seaLevel) #h1 is antena's hight, h2 is transmitor's hight
       LOSgrid <- res[[2]]
       LOSlogical <- res[[1]][1,]
       df <- data.frame(value = LOSlogical, LON = LOSgrid[,1], LAT = LOSgrid[,2])
@@ -174,13 +211,37 @@ ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist
     }
   end.time <- Sys.time()
   print(time.taken <- end.time - start.time)
-  names(LOSLayers) <- sprintf("ANT%s",ANTlist)
+  names(LOSLayers) <- sprintf("ANT%s",ANTlist1)
   
+  if(!is.na(seaLevel))
+  {
+    InvLayer <- DEM
+    invalidGridPoints <- which(getValues(DEM)+abs(transAlt) > seaLevel)
+    validGridPoints <- which(getValues(DEM)+abs(transAlt) < seaLevel)
+    InvLayer[which(is.na(getValues(DEM)))] <- F
+    InvLayer[invalidGridPoints] <- T
+    InvLayer[validGridPoints] <- F
+    InvLayer <- crop(InvLayer,extent(LOSLayers))
+    LOSLayers <- addLayer(LOSLayers,InvLayer)
+    names(LOSLayers)[nlayers(LOSLayers)] <-   sprintf("InvalidCalc")
+    LOSLayers[[nlayers(LOSLayers)]]@title <- sprintf("Invalid Area for transmitter altitude =%.3fm and sea level= %.3fm",seaLevel,transAlt)
+    ANTS.df1 <- as.data.frame(ANTS.df1)
+    invalidLayer <- as.data.frame(ANTS.df1[1,])
+    invalidLayer$ID <- 999
+    invalidLayer$Towerheight <- seaLevel
+    invalidLayer$GroundASL <- transAlt
+    invalidLayer$ANTName <- "Invalid Area"
+    invalidLayer$LON <- 0
+    invalidLayer$LAT <- 0
+    ANTS.df1 <- rbind(ANTS.df1,invalidLayer)
+    ANTlist1 <- cbind(ANTlist1,'999')
+    
+  }
   # -----------------   Saving viewshed raster files -----------------------------
   names(LOSLayers)
   str_name <- paste0("TransAlt",as.character(transAlt),"m_",layername)
   writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
-  write.csv(ANTS.df[which(ANTS.df$ID %in% ANTlist),],paste0("LOSData/ANTS_",str_name,".csv"))
+  write.csv(ANTS.df1[which(ANTS.df1$ID %in% ANTlist1),],paste0("LOSData/ANTS_",str_name,".csv"))
   writeRaster(DEM,paste0("LOSData/DEM_",str_name))
   print(paste("saved file",str_name))
   # # this file must be accompanied by the DEM and ANTS file
@@ -328,14 +389,13 @@ UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL
 
 
 
-viewshed <- function (r, shape, turbine_locs, h1 = 0, h2 = 0) 
+viewshed <- function (r, tower_locs, h1 = 0, h2 = 0,maxRange,includeCurv=FALSE,seaLevel) 
 {
   print("local version")
-  if (class(shape)[1] == "sf") {
-    shape <- as(shape, "Spatial")
-  }
-  if (class(turbine_locs)[1] == "SpatialPoints") {
-    turbine_locs <- sp::coordinates(turbine_locs)
+  if (is.na(seaLevel)& h2<0)
+    errorCondition(sprintf('Negative transmitter height (%f) requires well-defined sea level (the default value is NA)',h2))
+  if (class(tower_locs)[1] == "SpatialPoints") {
+    tower_locs <- sp::coordinates(tower_locs)
   }
   mw <- methods::as(r, "SpatialPixelsDataFrame")
   mw <- methods::as(mw, "SpatialPolygons")
@@ -343,33 +403,44 @@ viewshed <- function (r, shape, turbine_locs, h1 = 0, h2 = 0)
   rownames(sample_xy) <- NULL
   colnames(sample_xy) <- c("x1", "x2")
   reso <- min(raster::res(r))
-  res <- t(apply(turbine_locs, 1, function(d) {
-    viewTo(r, xy1 = d, xy2 = sample_xy, h1, h2, reso)
-  }))
-  return(list(Result = res, Raster_POI = sample_xy)) #, Area = sf::st_as_sf(shape), 
-      #        DEM = r, Turbines = turbine_locs))
+  res <-   viewTo(r, xy1 = tower_locs, xy2 = sample_xy, h1, h2,maxRange=maxRange, reso,includeCurv=includeCurv,seaLevel=seaLevel)
+  return(list(Result = res, Raster_POI = sample_xy)) 
 }
 
-cansee <- function (r, xy1, xy2, h1 = 0, h2 = 0, reso) 
-{
-  xyz = rasterprofile(r, xy1, xy2, reso)
-  np = length(xyz[, 1]) 
-  h1 = xyz[, "z"][1] + h1
-  h2 = xyz[, "z"][np] + h2
-  hpath = h1 + (0:(np-1)) * (h2 - h1)/(np-1)
-  invisible(!any(hpath < xyz[, "z"], na.rm = TRUE))
-}
-
-viewTo <- function (r, xy1, xy2, h1 = 0, h2 = 0, reso) 
+viewTo <- function (r, xy1, xy2, h1 = 0, h2 = 0,maxRange, reso,includeCurv=FALSE,seaLevel) 
 {
   a <- t(apply(xy2, 1, function(d) {
-    cansee(r[[1]], xy1 = xy1, xy2 = d, h1, h2, reso)
-  }))
+    cansee(r[[1]], xy1 = xy1, xy2 = d, h1, h2,maxRange=maxRange, reso,includeCurv,seaLevel=seaLevel)
+  })) 
   a[is.na(a)] <- FALSE
   return(as.vector(a))
 }
 
-rasterprofile <- function (r, xy1, xy2, reso, plot = FALSE) 
+cansee <- function (r, xy1, xy2, h1 = 0, h2 = 0,maxRange=NA, reso,includeCurv=FALSE,seaLevel) 
+{
+
+  lineLength <- geosphere::distCosine(xy2,xy1)
+  if ((!is.na(maxRange))&(lineLength>maxRange)) # if above maximum range
+      return(FALSE)
+  if (h2<0)
+      {if ((!is.na(seaLevel))&(raster::extract(x = r, y = cbind(xy2[1], xy2[2])) > h2 + seaLevel))  # if transmitter height is chosen with respect to sea level and it is found below ground
+          return(FALSE)
+      }else
+      {if ((!is.na(seaLevel))&(raster::extract(x = r, y = cbind(xy2[1], xy2[2])) + h2 >seaLevel))  # if transmitter height at the point is above sea level
+        return(FALSE)
+      } 
+  xyz = rasterprofile(r, xy1, xy2, reso,includeCurv=includeCurv,lineLength=lineLength)
+  np = length(xyz[, 1]) 
+  h1 = xyz[, "z"][1] + h1
+  if (h2<0)
+  {h2 = seaLevel + h2 # transmitter height with respect to sea level
+    }else
+  {h2 = xyz[, "z"][np] + h2} # transmitter height with respect to ground 
+  hpath = h1 + (0:(np-1)) * (h2 - h1)/(np-1)
+  return(!any(hpath < xyz[, "z"], na.rm = TRUE))
+}
+
+rasterprofile <- function (r, xy1, xy2, reso,includeCurv=FALSE ,plot = FALSE,lineLength) 
 {
   if (plot) {
     plot(r)
@@ -379,14 +450,28 @@ rasterprofile <- function (r, xy1, xy2, reso, plot = FALSE)
            cex = 2)
   }
   dx = sqrt((xy1[1] - xy2[1])^2 + (xy1[2] - xy2[2])^2)
+  # dx = rgeos::gLength(spLines(rbind(xy2,xy1),crs='+proj=longlat +datum=WGS84'))
   nsteps = 1 + round(dx/reso)
   xc = xy1[1] + (0:nsteps) * (xy2[1] - xy1[1])/nsteps
   yc = xy1[2] + (0:nsteps) * (xy2[2] - xy1[2])/nsteps
+  
   if (plot) {
     points(x = xc, y = yc, col = "red", pch = 20, cex = 1.4)
   }
   rasterVals <- raster::extract(x = r, y = cbind(xc, yc))
-  pointsZ <- cbind(x = xc, y = yc, z = rasterVals)
+  if(includeCurv)
+      {  
+      # earth_curv=sqrt((6371000)^2+xyz[, "dist"]^2)-6371000 # effect of earth curveture at distance for surface viewer
+      # earth_curv=xyz[, "dist"]^2/2/6371000 # approximation
+      # lineLength <- geosphere::distCosine(xy2,xy1)
+      # lineLength <- geosphere::distGeo(xy2,xy1)
+      # lineLength <- sqrt(((xy1[1] - xy2[1])*longDeglength)^2 + ((xy1[2] - xy2[2])*latDeglength)^2)
+      dist=0+(0:nsteps)*lineLength/nsteps
+      curveEffect <- dist^2/12742000
+      pointsZ <- cbind(x = xc, y = yc, z = rasterVals-curveEffect)
+      }
+  else 
+      pointsZ <- cbind(x = xc, y = yc, z = rasterVals)
   if (plot) {
     points(pointsZ[, "x"], pointsZ[, "y"], pch = 20, col = "black")
     text(pointsZ[, "x"], pointsZ[, "y"], pos = 1, pointsZ[, 
