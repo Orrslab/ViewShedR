@@ -83,10 +83,10 @@ val_inv = as.numeric(0:1)
 pal_inv = colorNumeric(cpal_inv,val_inv, na.color = "transparent")
 
 LOSfilesnames <- dir("LOSData")
-LOSfilesnames <- LOSfilesnames[grep("LOSLayers",LOSfilesnames)]
-LOSfilesnames <- LOSfilesnames[grep(".grd",LOSfilesnames)]
-LOSfilesnames <- gsub("LOSLayers_","",LOSfilesnames)
-LOSfilesnames <- gsub(".grd","",LOSfilesnames)
+LOSfilesnames <- LOSfilesnames[grep("_vsf.Rdata",LOSfilesnames)]
+# LOSfilesnames <- LOSfilesnames[grep(".grd",LOSfilesnames)]
+LOSfilesnames <- gsub("_vsf.Rdata","",LOSfilesnames)
+# LOSfilesnames <- gsub(".grd","",LOSfilesnames)
 IconsVis <- iconList(
   NoSeeIcon = makeIcon("LOSData/NoSee.png", iconWidth = 15, iconHeight = 15),
   SeeIcon = makeIcon("LOSData/See.png", iconWidth = 15, iconHeight = 15))
@@ -180,15 +180,15 @@ ui = fluidPage(
                    uiOutput("AntALT_choice"),
                    h4(textOutput("txtOutput_AntASL",inline = F), align = "center"),
                    # selectInput(inputId="ANT",label ="Tower",choices = ANTS.df$ID,selected = ANTS.df$ID[1] ),
-                   h2("Transmitter",align = "center"),
+                   h2("target",align = "center"),
                    h4("Use Map marker to choose loaction", align = "center"),
                    fluidRow(
-                     # column(6, numericInput(inputId = "transLAT",label =  "transmitter LAT:",value = 32.55000  )),
+                     # column(6, numericInput(inputId = "transLAT",label =  "target LAT:",value = 32.55000  )),
                      column(6, uiOutput("transLAT_choice")),
                      column(6, uiOutput("transLON_choice"))
-                     # column(6, numericInput(inputId ="transLON" ,label ="transmitter LON:",value = 35.41000 )),
+                     # column(6, numericInput(inputId ="transLON" ,label ="target LON:",value = 35.41000 )),
                    ),
-                   numericInput(inputId ="transALT" ,label ="trans ALT AGL (m):",value = 0, min =0 ),
+                   numericInput(inputId ="transALT" ,label ="Target ALT AGL (m):",value = 0, min =0 ),
                    # actionButton("calc_LOS",label =  "Calc", align = "center"),
                    fluidRow(
                      column(6, actionButton("calc_LOS",label =  "Calc", align = "center")),
@@ -220,8 +220,12 @@ server <- function(input, output, session) {
     observeEvent(input$Load_M, {
       input$Load_M
       isolate({
-        ANTS.df <<- read.csv(paste0("LOSData/ANTS_",input$Filename_M,".csv"))
-        LOSLayers <<- stack(paste0("LOSData/LOSLayers_",input$Filename_M,".gri")) 
+        # ANTS.df <<- read.csv(paste0("LOSData/ANTS_",input$Filename_M,".csv"))
+        # LOSLayers <<- stack(paste0("LOSData/LOSLayers_",input$Filename_M,".gri")) 
+        load(paste0("LOSData/",input$Filename_M,"_vsf.Rdata"))
+        ANTS.df <<- ANTS.df 
+        LOSLayers <<- LOSLayers
+        DEM <<- DEM
         if ('999' %in% ANTS.df$ID)
         {InvalidLayerFlag <- TRUE
         IvalidLayerIdx <<- which(ANTS.df$ID=='999')
@@ -235,10 +239,11 @@ server <- function(input, output, session) {
         InvLayer[vIdx] <- F
         InvLayer[1] <- T
         LOSLayers <<- addLayer(LOSLayers,InvLayer)
+        LOSLayers <- addLayer(LOSLayers,InvLayer)
         IvalidLayerIdx <<- nrow(ANTS.df)+1
         }
         coordinates(ANTS.df) <- ~LON+LAT
-        DEM <<- raster(paste0("LOSData/DEM_",input$Filename_M,".gri"))
+        # DEM <<- raster(paste0("LOSData/DEM_",input$Filename_M,".gri"))
         antID <- ANTS.df$ID    
           output$ANTControls1_M <- renderUI({
             checkboxGroupInput("antID_M", "Towers",choiceValues=ANTS.df$ID,choiceNames = paste (ANTS.df$ID,"-",ANTS.df$ANTName),inline = F)})
@@ -251,7 +256,7 @@ server <- function(input, output, session) {
               addProviderTiles('Esri.WorldImagery') %>%
               addRasterImage(DEM,color = pal,  opacity = 0.8) %>%
               addRasterImage(LOSLayers[[IvalidLayerIdx]], colors = cpal_inv, opacity = 0.8) %>%
-              addLegend(pal = pal, values = values(DEM),  title = "height") %>%
+              addLegend(pal = pal, values = values(DEM),  title = "Elevation") %>%
               addCircles(data=ANTS.df[,], weight = 5, fillOpacity = 1,color = "red",
                          popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),
                                                     ",",ANTS.df$ANTName,
@@ -265,7 +270,7 @@ server <- function(input, output, session) {
                                                     "m, Tower height=",ANTS.df$Towerheight[ANT_indeces_M()],
                                                     "m, (",ANTS.df$LAT[ANT_indeces_M()],",",ANTS.df$LON[ANT_indeces_M()],")"
                                                     )))%>%
-              addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F))
+              addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = T))
           })
         # output$LeafletMAP_1 <- renderUI({leafletOutput("mymapL",height =input$mapheight_1 )})
         output$LeafletMAP_1 <- renderUI({leafletOutput("mymapL",height ="500px" )})
@@ -274,11 +279,11 @@ server <- function(input, output, session) {
             addProviderTiles('Esri.WorldImagery') %>%
             addRasterImage(DEM,color = pal, opacity = 0.3) %>%
             addRasterImage(LOSLayers[[IvalidLayerIdx]], colors = cpal_inv, opacity = 0.8) %>%
-            addLegend(pal = pal, values = values(DEM),  title = "height") %>%
+            addLegend(pal = pal, values = values(DEM),  title = "Elevation") %>%
             # setView(lng = 35.43, lat = 32.54, zoom = 12) %>%
             addCircles(data=ANTS.df, weight = 5, fillOpacity = 1,color = "red",
                        popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),",",ANTS.df$ANTName)))%>%
-            addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F)) %>% 
+            addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = T)) %>% 
             addDrawToolbar(polylineOptions = F,polygonOptions = F,circleOptions = F,
                            rectangleOptions = F,circleMarkerOptions = F,
                            singleFeature = T, targetGroup='draw', editOptions = F)
@@ -340,7 +345,7 @@ server <- function(input, output, session) {
                        popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID[ANT_indeces_C()]),",",ANTS.df$ANTName[ANT_indeces_C()])))%>%
             addCircles(data=ANTS.df[ANT_indeces_C(),], weight = 5, fillOpacity = 1,color = "red",
                        popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID[ANT_indeces_C()]),",",ANTS.df$ANTName[ANT_indeces_C()])))%>%
-            addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F))
+            addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = T))
           
         })})
     })
@@ -363,8 +368,8 @@ server <- function(input, output, session) {
     observeEvent(input$Load_M, {
       input$Load_M
       isolate({
-        output$ANTControls1_I <- renderUI({checkboxGroupInput("antID1_I", "clear Tower",choiceValues=ANTS.df$ID,choiceNames = paste (ANTS.df$ID,"-",ANTS.df$ANTName),inline = F)})
-        output$ANTControls2_I <- renderUI({checkboxGroupInput("antID2_I", "blind Tower",choices =ANTS.df$ID,inline = F)})
+        output$ANTControls1_I <- renderUI({checkboxGroupInput("antID1_I", "Viewing Tower",choiceValues=ANTS.df$ID,choiceNames = paste (ANTS.df$ID,"-",ANTS.df$ANTName),inline = F)})
+        output$ANTControls2_I <- renderUI({checkboxGroupInput("antID2_I", "Obstructed Tower",choices =ANTS.df$ID,inline = F)})
         output$txtOutput2_I <-  renderText({  paste0( input$Filename_M) })
         })})
     
@@ -386,10 +391,10 @@ server <- function(input, output, session) {
             addRasterImage(LOSLayers[[IvalidLayerIdx]], colors = cpal_inv, opacity = 0.8) %>%
             addLegend(colors = cpal_I,labels = 0:1, title = "Yes / No")%>%
             addMarkers(data=ANTS.df[ANT_indeces1_I(),], icon = ~ IconsVis[[2]],
-                       popup = ~htmlEscape(paste0("can see: ID=",as.character(ANTS.df$ID[ANT_indeces1_I()]),",",ANTS.df$ANTName[ANT_indeces1_I()])))%>%
+                       popup = ~htmlEscape(paste0("Viewing: ID=",as.character(ANTS.df$ID[ANT_indeces1_I()]),",",ANTS.df$ANTName[ANT_indeces1_I()])))%>%
             addMarkers(data=ANTS.df[ANT_indeces2_I(),], icon = ~ IconsVis[[1]],
-                       popup = ~htmlEscape(paste0("cannot see: ID=",as.character(ANTS.df$ID[ANT_indeces2_I()]),",",ANTS.df$ANTName[ANT_indeces2_I()])))%>%
-            addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F))
+                       popup = ~htmlEscape(paste0("Obstructed: ID=",as.character(ANTS.df$ID[ANT_indeces2_I()]),",",ANTS.df$ANTName[ANT_indeces2_I()])))%>%
+            addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = T))
         })})
     }) 
     observeEvent(input$SaveInterKMZ, {
@@ -422,8 +427,8 @@ server <- function(input, output, session) {
       # names(Point) <- c("LAT","LON")
       # output$table <- renderTable(Point,digits = 5 )
       output$txtOutput_coords <- renderText({      paste("lat=",feature$geometry$coordinates[[2]],"lon=",feature$geometry$coordinates[[1]])    })
-      output$transLAT_choice <- renderUI({numericInput(inputId = "transLAT",label =  "transmitter LAT:",value = feature$geometry$coordinates[[2]]  )})
-      output$transLON_choice <- renderUI({numericInput(inputId = "transLON",label =  "transmitter LON:",value = feature$geometry$coordinates[[1]]  )})
+      output$transLAT_choice <- renderUI({numericInput(inputId = "transLAT",label =  "target LAT:",value = feature$geometry$coordinates[[2]]  )})
+      output$transLON_choice <- renderUI({numericInput(inputId = "transLON",label =  "target LON:",value = feature$geometry$coordinates[[1]]  )})
     }) 
       
       observeEvent(input$ANT, {
@@ -432,8 +437,8 @@ server <- function(input, output, session) {
         output$AntALT_choice <- renderUI({numericInput(inputId = "AntAGL",label =  "Tower ALT AGL (m):",value = ANTS.df$Towerheight[which(ANTS.df$ID==input$ANT)]  )})
       })
     
-    output$transLAT_choice <- renderUI({numericInput(inputId = "transLAT",label =  "transmitter LAT:",value = 32.50  )})
-    output$transLON_choice <- renderUI({numericInput(inputId = "transLON",label =  "transmitter LON:",value = 35.50  )})
+    output$transLAT_choice <- renderUI({numericInput(inputId = "transLAT",label =  "target LAT:",value = 32.50  )})
+    output$transLON_choice <- renderUI({numericInput(inputId = "transLON",label =  "target LON:",value = 35.50  )})
     
     observeEvent(input$calc_LOS, {
       input$calc_LOS
@@ -472,8 +477,8 @@ server <- function(input, output, session) {
             domain = seq(min(DEM_tight@data@values),max(DEM_tight@data@values),length.out = 50)
           )
           
-          output$txtOutput_TRNSASL <- renderText({paste("Transmitter ground height is",LineDEM[length(LineDEM)],"m")    })
-          output$txtOutput_AntASL <- renderText({paste("Tower ground height is",LineDEM[1],"m")    })
+          output$txtOutput_TRNSASL <- renderText({paste("target ground elevation is",LineDEM[length(LineDEM)],"m")    })
+          output$txtOutput_AntASL <- renderText({paste("Tower ground elevation is",LineDEM[1],"m")    })
           
           output$LOSplot <- renderUI({plotOutput("plot1",height =input$mapheight_2 )})
           Idx <- round(seq(from=1,to=length(xyzline$LON),length.out =min(length(xyzline$LON),8)))
@@ -485,7 +490,7 @@ server <- function(input, output, session) {
             points(c(xyzline$dist[1],lineLength),c(observer[3],target[3]),type="l",col=vis,lwd = 4)
             # points(xyzline$dist[Idx],rep(mean(xyzline$DEM)-sd(xyzline$DEM),length(Idx)),pch=3,col='black',lwd = 1)
             text(xyzline$dist[1],(target[3]+observer[3])/2,"Tower")
-            text(lineLength,(target[3]+observer[3])/2,"Transmitter") 
+            text(lineLength,(target[3]+observer[3])/2,"target") 
             points(xyzline$dist[Idx],rep(mean(xyzline$DEM)+1*sd(xyzline$DEM),length(Idx)),pch=3,col='black',lwd = 1)
             text(xyzline$dist[Idx],rep(mean(xyzline$DEM)+0.5*sd(xyzline$DEM),length(Idx)),as.character(round(xyzline$LAT[Idx],4)))
             text(xyzline$dist[Idx],rep(mean(xyzline$DEM)+0*sd(xyzline$DEM),length(Idx)),as.character(round(xyzline$LON[Idx],4)))
@@ -499,7 +504,7 @@ server <- function(input, output, session) {
               addRasterImage(DEM_tight,colors = pal, opacity = 0.8) %>%
               addRasterImage(LOSLayers[[IvalidLayerIdx]], colors = cpal_inv, opacity = 0.8) %>%
               # setView(lng = 35.43, lat = 32.54, zoom = 12) %>%
-              addLegend(pal = pal, values = DEM_tight@data@values,  title = "height") %>% 
+              addLegend(pal = pal, values = DEM_tight@data@values,  title = "Elevation") %>% 
               addCircles(data=ANTS.df, weight = 5, fillOpacity = 1,color = "red",
                          popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),",",ANTS.df$ANTName)))%>%
               addCircles(data=xyzline, weight = 3, fillOpacity = 1,color = "green",
@@ -507,7 +512,7 @@ server <- function(input, output, session) {
                                                     ", LOSline=",as.character(round(xyzline$z,1)),
                                                     ", LAT=",as.character(round(xyzline$LAT,3)),
                                                     ", LON=",as.character(round(xyzline$LON,3)))))%>%
-              addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = F))
+              addScaleBar( position =  "bottomleft", options = scaleBarOptions(maxWidth = 250, metric = TRUE,imperial = T))
           )
         }) })
        

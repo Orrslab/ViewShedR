@@ -29,10 +29,10 @@ viewSetup(ANTS.df,DEM)
 
 # ------ Calculating viewshed for all Antennas serial version --------------------
 ANTlist <-as.character(ANTS.df$ID)
-# ANTlist <- c("31","21")
-transAlts <-   c(-2)# c(0.3, 2, 5,10) #
-Layername <- "Res30Range4Tartugas"
-SerialComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist,includeCurv=F,seaLevel = 0)
+ANTlist <- c("1","2","3",'4')
+transAlts <-  c(0.3, 2, 5,10) # c(-2)# 
+Layername <- "Res30Harod"
+SerialComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist,includeCurv=F)#,seaLevel = 0)
 
 # ------ Calculating viewshed for all Antennas parallel version--------------------
 detectCores()
@@ -42,17 +42,19 @@ ParallelComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlis
 # ------  substituting / adding a single layer in a LOSLayers file
 
 listLOSFiles()
-str_name_base <- "TransAlt10m_Res30m_Aug"
-str_name_new <- "TransAlt10m_Res30a50"
-str_name_out <- "TransAlt10m_Res30m_Nov"
+str_name_base <- "TransAlt0.3m_Res30m"
+str_name_new <- "TransAlt0.3m_Res30m_Aug_unused"
+str_name_out <- "TransAlt0.3m_Res30m_temp"
 listAnts(str_name_base)
 listAnts(str_name_new)
 
-AddRmAnts (final_name=str_name_out,base_str_name=str_name_base,add_str_name=str_name_new,ANTID2rm = c(7,34,35,37,38,39,40,41,42),ANTID2add = c(45,46,47,48))
+AddRmAnts (final_name=str_name_out,base_str_name=str_name_base,add_str_name=str_name_new,ANTID2rm = c(7),ANTID2add = c(31,33))
 AddRmAnts (final_name=str_name_out,base_str_name=str_name_base,add_str_name=str_name_new,ANTID2add = c(50))
 AddRmAnts (final_name=str_name_out,base_str_name=str_name_base,ANTID2rm = c(2,3))
- 
-UpdateAntnames  (final_name=str_name_out,base_str_name=str_name_base,initial_ANTID=c(33,47),newANTID=c(18,7),newANTname=c("NauraRes","MaagarEinHanatziv"))
+
+listAnts(str_name_out)
+
+UpdateAntnames  (final_name=str_name_out,base_str_name=str_name_out,initial_ANTID=c(33),newANTID=c(18),newANTname=c("NauraRes"))
 # UpdateAntnames  (final_name=str_name_out,base_str_name=str_name,initial_ANTID=c(33,48),newANTID=c(18,7),newANTname=c("N1-2","N5-15","N3-23"))
 # test the layer:
 listAnts(str_name_out)

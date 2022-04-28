@@ -1,5 +1,5 @@
 setEnv <- function()
-{
+  {
   # install.packages("shiny")
   Rver <- R.version
   if (as.numeric(Rver$major)<4)
@@ -15,7 +15,8 @@ setEnv <- function()
   wgs84 <<- "+proj=longlat +datum=WGS84"
 }
 
-InstallSourcePcks <- function(pcks){
+InstallSourcePcks <- function(pcks)
+  {
   for( i in pcks ){
     #  require returns TRUE invisibly if it was able to load package
     if( ! require( i , character.only = TRUE ) ){
@@ -26,8 +27,9 @@ InstallSourcePcks <- function(pcks){
     }
   }
 }
+
 getDEM <- function(type="file",box,filename=DEM_name,resoluton=NULL)
-{
+  {
 # producing a DEM file in the "box" limits based on the provided data and type
   # other DEM files are available at http://sendimage.whu.edu.cn/res/DEM_share/SRTM1/N30,E30/
 
@@ -71,7 +73,7 @@ getDEM <- function(type="file",box,filename=DEM_name,resoluton=NULL)
 }
 
 setANTS <- function(ANTfilename,DEM,visual=T)
-{ANTS.df <- read.csv(ANTfilename)
+  {ANTS.df <- read.csv(ANTfilename)
   print(sprintf("Antenna file contains %i towers with variables: ",nrow(ANTS.df)))
   print(names(ANTS.df))
   print(sprintf("the file mast contain the variables \"ANTName\",\"ID\", \"LAT\", \"LON\",\"Towerheight\""))
@@ -89,7 +91,7 @@ setANTS <- function(ANTfilename,DEM,visual=T)
   }
 
 viewSetup <- function(ANTS.df,DEM)
-{
+  {
   pal <- colorNumeric(palette = "Spectral",domain = seq(min(DEM@data@min),max(DEM@data@max),length.out = 50))
   print(as.data.frame(ANTS.df))
   ll<-leaflet() %>% 
@@ -106,24 +108,24 @@ viewSetup <- function(ANTS.df,DEM)
   ll
 }
 
-SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL,includeCurv=FALSE,seaLevel=NA)
+SerialComputeViewShed <- function(layername,DEM,ANTS.df0,transAltlist=2,ANTlist=NULL,includeCurv=FALSE,seaLevel=NA)
 {
   if(is.null(ANTlist))
-    ANTlist <-as.character(ANTS.df$ID)
-  ANTS <- SpatialPoints(ANTS.df, proj4string=CRS(wgs84))
+    ANTlist <-as.character(ANTS.df0$ID)
+  ANTS <- SpatialPoints(ANTS.df0, proj4string=CRS(wgs84))
   for (transAlt in transAltlist)
   {
+    ANTS.df <- ANTS.df0
+    ANTlist1 <- ANTlist
     FirstIter <- TRUE
     LOSLayers <- NULL
     print(sprintf("trasmittor height =%f",transAlt))
     for (ANT_ID in ANTlist)
     {
       print(ANT_ID)
+      ANT_index <- as.numeric(which(ANTS.df$ID==ANT_ID))
       start.time <- Sys.time()
-      ANTS.df1 <- ANTS.df
-      ANTlist1 <- ANTlist
-      ANT_index <- as.numeric(which(ANTS.df1$ID==ANT_ID))
-      res <- viewshed(r =DEM, tower_locs = ANTS[ANT_index,],  h1=ANTS.df1$Towerheight[ANT_index], h2=transAlt,maxRange=ANTS.df1$AntRadius[ANT_index],includeCurv=includeCurv,seaLevel=seaLevel) #h1 is antena's hight, h2 is transmitor's hight
+      res <- viewshed(r =DEM, tower_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt,maxRange=ANTS.df$AntRadius[ANT_index],includeCurv=includeCurv,seaLevel=seaLevel) #h1 is antena's hight, h2 is transmitor's hight
       if(FirstIter) LOSgrid <- res$Raster_POI
       LOSlogical <- res$Result
       # collecting los in one list:
@@ -137,12 +139,11 @@ SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=N
         LOSLayers <- addLayer(LOSLayers,r)
       names(LOSLayers)[nlayers(LOSLayers)] <-   sprintf("ANT%s",ANT_ID)
       LOSLayers[[nlayers(LOSLayers)]]@title <- sprintf("ANT%s, coords: %f,%f, antAlt(Towerheight)=%.3fm, trnasAlt=%.3fm,",
-                                                       ANT_ID,ANTS[ANT_index,]@coords[1],ANTS[ANT_index,]@coords[2],ANTS.df1$Towerheight[ANT_index],transAlt)
+                                                       ANT_ID,ANTS[ANT_index,]@coords[1],ANTS[ANT_index,]@coords[2],ANTS.df$Towerheight[ANT_index],transAlt)
       FirstIter <- FALSE
       end.time <- Sys.time()
       print(time.taken <- end.time - start.time)
     }
-    
     if(!is.na(seaLevel)) # Creating a Layer indicating invalid locations (calculated height is above water or below ground)
     {
       InvLayer <- DEM
@@ -155,43 +156,44 @@ SerialComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=N
       LOSLayers <- addLayer(LOSLayers,InvLayer)
       names(LOSLayers)[nlayers(LOSLayers)] <-   sprintf("InvalidCalc")
       LOSLayers[[nlayers(LOSLayers)]]@title <- sprintf("Invalid Area for transmitter altitude =%.3fm and sea level= %.3fm",seaLevel,transAlt)
-      ANTS.df1 <- as.data.frame(ANTS.df1)
-      invalidLayer <- as.data.frame(ANTS.df1[1,])
+      ANTS.df <- as.data.frame(ANTS.df)
+      invalidLayer <- as.data.frame(ANTS.df[1,])
       invalidLayer$ID <- 999
       invalidLayer$Towerheight <- seaLevel
       invalidLayer$GroundASL <- transAlt
       invalidLayer$ANTName <- "Invalid Area"
       invalidLayer$LON <- 0
       invalidLayer$LAT <- 0
-      ANTS.df1 <- rbind(ANTS.df1,invalidLayer)
+      ANTS.df <- rbind(ANTS.df,invalidLayer)
       ANTlist1 <- cbind(ANTlist1,'999')
       
     }
-
+    ANTS.df <- as.data.frame(ANTS.df[which(ANTS.df$ID %in% ANTlist1),])
     
     # -----------------   Saving viewshed raster files -----------------------------
     names(LOSLayers)
     str_name <- paste0("TransAlt",as.character(transAlt),"m_", layername) #Res30m_24_33
-    writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
-    write.csv(ANTS.df1[which(ANTS.df1$ID %in% ANTlist1),],paste0("LOSData/ANTS_",str_name,".csv"))
-    writeRaster(DEM,paste0("LOSData/DEM_",str_name))
+    # writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
+    # write.csv(ANTS.df[which(ANTS.df$ID %in% ANTlist1),],paste0("LOSData/ANTS_",str_name,".csv"))
+    # writeRaster(DEM,paste0("LOSData/DEM_",str_name))
+    save(file=paste0("LOSData/",str_name,"_vsf.Rdata"),LOSLayers,ANTS.df,DEM)
     print(paste("saved file",str_name))
     # # this file must be accompeneid by the DEM and ANTS file
   }
   
 }
 
-ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist=NULL,includeCurv=FALSE,seaLevel=NA)
+ParallelComputeViewShed <- function(layername,DEM,ANTS.df0,transAltlist=2,ANTlist=NULL,includeCurv=FALSE,seaLevel=NA)
 {
   
   if(is.null(ANTlist))
-    ANTlist <-as.character(ANTS.df$ID)
-  ANTS <- SpatialPoints(ANTS.df, proj4string=CRS(wgs84))
+    ANTlist <-as.character(ANTS.df0$ID)
+  ANTS <- SpatialPoints(ANTS.df0, proj4string=CRS(wgs84))
   for (transAlt in transAltlist)
 {
   print(sprintf("trasmittor height =%f",transAlt))
   start.time <- Sys.time()
-  ANTS.df1 <- ANTS.df
+  ANTS.df <- ANTS.df0
   ANTlist1 <- ANTlist
   r <- raster()
   LOSLayers <- stack(r)
@@ -199,9 +201,9 @@ ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist
     {
       source('functions/Viewshed.R')
       setEnv()
-      ANT_ID <- ANTS.df1$ID[i]
-      ANT_index <- as.numeric(which(ANTS.df1$ID==ANT_ID))
-      res <- viewshed(r =DEM, tower_locs = ANTS[ANT_index,],  h1=ANTS.df1$Towerheight[ANT_index], h2=transAlt,maxRange=ANTS.df1$AntRadius[ANT_index],includeCurv=includeCurv,seaLevel=seaLevel) #h1 is antena's hight, h2 is transmitor's hight
+      ANT_ID <- ANTS.df$ID[i]
+      ANT_index <- as.numeric(which(ANTS.df$ID==ANT_ID))
+      res <- viewshed(r =DEM, tower_locs = ANTS[ANT_index,],  h1=ANTS.df$Towerheight[ANT_index], h2=transAlt,maxRange=ANTS.df$AntRadius[ANT_index],includeCurv=includeCurv,seaLevel=seaLevel) #h1 is antena's hight, h2 is transmitor's hight
       LOSgrid <- res[[2]]
       LOSlogical <- res[[1]][1,]
       df <- data.frame(value = LOSlogical, LON = LOSgrid[,1], LAT = LOSgrid[,2])
@@ -225,40 +227,56 @@ ParallelComputeViewShed <- function(layername,DEM,ANTS.df,transAltlist=2,ANTlist
     LOSLayers <- addLayer(LOSLayers,InvLayer)
     names(LOSLayers)[nlayers(LOSLayers)] <-   sprintf("InvalidCalc")
     LOSLayers[[nlayers(LOSLayers)]]@title <- sprintf("Invalid Area for transmitter altitude =%.3fm and sea level= %.3fm",seaLevel,transAlt)
-    ANTS.df1 <- as.data.frame(ANTS.df1)
-    invalidLayer <- as.data.frame(ANTS.df1[1,])
+    ANTS.df <- as.data.frame(ANTS.df)
+    invalidLayer <- as.data.frame(ANTS.df[1,])
     invalidLayer$ID <- 999
     invalidLayer$Towerheight <- seaLevel
     invalidLayer$GroundASL <- transAlt
     invalidLayer$ANTName <- "Invalid Area"
     invalidLayer$LON <- 0
     invalidLayer$LAT <- 0
-    ANTS.df1 <- rbind(ANTS.df1,invalidLayer)
+    ANTS.df <- rbind(ANTS.df,invalidLayer)
     ANTlist1 <- cbind(ANTlist1,'999')
     
   }
   # -----------------   Saving viewshed raster files -----------------------------
   names(LOSLayers)
   str_name <- paste0("TransAlt",as.character(transAlt),"m_",layername)
-  writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
-  write.csv(ANTS.df1[which(ANTS.df1$ID %in% ANTlist1),],paste0("LOSData/ANTS_",str_name,".csv"))
-  writeRaster(DEM,paste0("LOSData/DEM_",str_name))
+  # writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",str_name)) # write the file
+  # write.csv(ANTS.df[which(ANTS.df$ID %in% ANTlist1),],paste0("LOSData/ANTS_",str_name,".csv"))
+  # writeRaster(DEM,paste0("LOSData/DEM_",str_name))
+  save(file=paste0("LOSData/",str_name,"_vsf.Rdata"),LOSLayers,ANTS.df,DEM)
   print(paste("saved file",str_name))
   # # this file must be accompanied by the DEM and ANTS file
 }
 }
 
 listLOSFiles <- function(dir="LOSData")
-{gsub(".csv",'',gsub("ANTS_",'', list.files(dir,pattern = "*.csv")))}
+{gsub("_vsf.Rdata",'',gsub("ANTS_",'', list.files(dir,pattern = "*_vsf.Rdata")))}
+
+loadRData <- function(fileName,items,items_out=NULL){
+  if(is.null(items_out))
+    items_out <- items
+  if (length(items)!=length(items_out))
+    errorCondition('items length must be equal to items_out length ')
+  #loads an RData file, and returns it
+  load(fileName)
+  # get(ls()[ls() != fileName])
+  # mget(items)
+  for (item_index in 1:length(items))
+  assign(items_out[item_index],get(items[item_index]),envir=parent.frame())
+}
 
 listAnts <- function(str_name)
 {
   # str_name <- paste0("TransAlt",as.character(transAlt), "m_",str_name)
-  ANTS.df <- read.csv(paste0("LOSData/ANTS_",str_name,".csv"))
-  print(sprintf("The CSV file %s contains the following data:",paste0("LOSData/ANTS_",str_name,".csv")))
+  # ANTS.df <- read.csv(paste0("LOSData/ANTS_",str_name,".csv"))
+  # ANTS.df <- loadRData(paste0("LOSData/",str_name,"_vsf.RData"),"ANTS.df")
+  load(paste0("LOSData/",str_name,"_vsf.RData"))
+  print(sprintf("The file contains the following data:"))
   print(ANTS.df %>% dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL))
   print(sprintf("which corresponds to the following layers in the LOSLayers file:"))
-  LOSLayers <- stack(paste0("LOSData/LOSLayers_",str_name,".gri")) # write the file
+  # LOSLayers <- stack(paste0("LOSData/LOSLayers_",str_name,".gri")) # write the file
   print(names(LOSLayers))
 }
 
@@ -278,10 +296,11 @@ AddRmAnts <- function (final_name,base_str_name,add_str_name=NULL,ANTID2rm=NULL,
   
   base_str_name #<- paste0("TransAlt",as.character(transAlt), "m_",base_str_name)
   add_str_name #<- paste0("TransAlt",as.character(transAlt), "m_",add_str_name)
-  LOSLayers <- stack(paste0("LOSData/LOSLayers_",base_str_name,".gri"))
-  DEM <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
-  ANTS.df <- read.csv(paste0("LOSData/ANTS_",base_str_name,".csv")) %>% 
-    dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
+  load(paste0("LOSData/",base_str_name,"_vsf.RData"))
+  # LOSLayers <- stack(paste0("LOSData/LOSLayers_",base_str_name,".gri"))
+  # DEM <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
+  # ANTS.df <- read.csv(paste0("LOSData/ANTS_",base_str_name,".csv")) %>% 
+  #   dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
   
   if(rmFlag)
   {n_rm <- which(names(LOSLayers) %in% paste0("ANT",as.character(ANTID2rm)))
@@ -293,7 +312,10 @@ AddRmAnts <- function (final_name,base_str_name,add_str_name=NULL,ANTID2rm=NULL,
   }
   
   if(addFlag)
-  {LOSLayers_new <- stack(paste0("LOSData/LOSLayers_",add_str_name,".gri"))
+  {loadRData(paste0("LOSData/",add_str_name,"_vsf.RData"),
+             c('ANTS.df','LOSLayers'),
+             c('ANTS.df_new','LOSLayers_new'))
+    # LOSLayers_new <- stack(paste0("LOSData/LOSLayers_",add_str_name,".gri"))
   if(!all(res(LOSLayers_new)==res(LOSLayers)))
   {
     er <- errorCondition("the two LOSLayers are of different resolution")
@@ -304,8 +326,8 @@ AddRmAnts <- function (final_name,base_str_name,add_str_name=NULL,ANTID2rm=NULL,
     er <- errorCondition("It seems that your source antenna file and the addition were calculated for differnt Transmitter heights")
     warning(er) 
   }
-  ANTS.df_new <- read.csv(paste0("LOSData/ANTS_",add_str_name,".csv")) %>% 
-    dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
+  # ANTS.df_new <- read.csv(paste0("LOSData/ANTS_",add_str_name,".csv")) %>% 
+  #   dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
     n_add <- which(names(LOSLayers_new) %in% paste0("ANT",as.character(ANTID2add)))
     print(sprintf("Adding %s ",names(LOSLayers_new)[n_add]))
     print(sprintf("From file %s with details:",add_str_name))
@@ -327,9 +349,10 @@ AddRmAnts <- function (final_name,base_str_name,add_str_name=NULL,ANTID2rm=NULL,
   
   # str_name <- paste0("TransAlt",as.character(transAlt),"m_", final_name)
   print(sprintf("saving to files %s :",final_name))
-  writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",final_name),overwrite=T) 
-  write.csv(ANTS.df,paste0("LOSData/ANTS_",final_name,".csv"))
-  writeRaster(DEM,paste0("LOSData/DEM_",final_name),overwrite=T) 
+  # writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",final_name),overwrite=T) 
+  # write.csv(ANTS.df,paste0("LOSData/ANTS_",final_name,".csv"))
+  # writeRaster(DEM,paste0("LOSData/DEM_",final_name),overwrite=T)
+  save(file=paste0("LOSData/",final_name,"_vsf.Rdata"),LOSLayers,ANTS.df,DEM)
 }
 
 UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL,newANTname=NULL)
@@ -354,10 +377,11 @@ UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL
     stop(er)
   }
   base_str_name #<- paste0("TransAlt",as.character(transAlt), "m_",base_str_name)
-  LOSLayers <- stack(paste0("LOSData/LOSLayers_",base_str_name,".gri")) # write the file
-  DEM <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
-  ANTS.df <- read.csv(paste0("LOSData/ANTS_",base_str_name,".csv")) %>% 
-             dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
+  # LOSLayers <- stack(paste0("LOSData/LOSLayers_",base_str_name,".gri")) # write the file
+  # DEM <- raster(paste0("LOSData/DEM_",base_str_name,".gri"))
+  # ANTS.df <- read.csv(paste0("LOSData/ANTS_",base_str_name,".csv")) %>% 
+  #            dplyr::select(ANTName,ID,LAT,LON,Towerheight,GroundASL)
+  load(paste0("LOSData/",base_str_name,"_vsf.RData"))
   
   
   for (i in 1: length(initial_ANTID))
@@ -381,12 +405,11 @@ UpdateAntnames <- function (final_name,base_str_name,initial_ANTID,newANTID=NULL
   # save and overwrite all files files using
   # str_name <- paste0("TransAlt",as.character(transAlt),"m_", final_name)
   print(sprintf("saving to files %s :",final_name))
-  writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",final_name),overwrite=T) 
-  write.csv(ANTS.df,paste0("LOSData/ANTS_",final_name,".csv"))
-  writeRaster(DEM,paste0("LOSData/DEM_",final_name),overwrite=T) 
+  # writeRaster(LOSLayers,paste0("LOSData/LOSLayers_",final_name),overwrite=T) 
+  # write.csv(ANTS.df,paste0("LOSData/ANTS_",final_name,".csv"))
+  # writeRaster(DEM,paste0("LOSData/DEM_",final_name),overwrite=T) 
+  save(file=paste0("LOSData/",final_name,"_vsf.Rdata"),LOSLayers,ANTS.df,DEM)
 }
-
-
 
 
 viewshed <- function (r, tower_locs, h1 = 0, h2 = 0,maxRange,includeCurv=FALSE,seaLevel) 
