@@ -9,28 +9,22 @@
 }
 
 #enter the geographical coordinates of two diagonal corners of the region
-##For system harod
-box <- data.frame(lat=c(32.38,32.68),lon=c(35.27, 35.68))
-DEM_name<-"DEM_Files/n32_e035_1arc_v3.tif" # DEM on geographic grid
-ANTfilename <- "ANT_Table_Files/HarodANTSLoc.csv"
 
-##For system harod for paper presentation
+
+##For system harod 
 box <- data.frame(lat=c(32.51,32.65),lon=c(35.38, 35.53))
 DEM_name<-"DEM_Files/DEM_Harod.tif" # DEM on geographic grid
 ANTfilename <- "ANT_Table_Files/HarodANTSLoc2.csv"
 
-##Tortugas
-box <- data.frame(lat=c(24.548,24.73),lon=c(-83.11, -82.76))
-box2 <- data.frame(lat=c(24.60520,24.63502),lon=c(-82.9047, -82.8710))
+##for Tortugas region
+#box <- data.frame(lat=c(24.60520,24.63502),lon=c(-82.9047, -82.8710))
 #if you have available DEM faile, enter its path (otherwise you can automatically download)
-ANTfilename <- "ANT_Table_Files/TartugasANTSLoc2.csv"
-
-DEM_name<-"DEM_Files/Tortugas_DEM_filled84_30m.tif" # DEM on geographic grid
+#ANTfilename <- "ANT_Table_Files/TartugasANTSLoc.csv
+#DEM_name<-"DEM_Files/Tortugas_DEM_filled84_30m.tif" # DEM on geographic grid
 # path for the antenna location csv file, the file must contain the variables: "ANTName","ID","LAT","LON","Towerheight"
 
 
 # ------ Antenna Positions ---------------
-# DEM0 <- raster(DEM_name)
 DEM <- getDEM(type="file",box,filename=DEM_name,resoluton = 30) # retrieve and cut DEM from "tif" file
 # DEM2 <- crop(DEM1, alignExtent(extent(DEM0), DEM0, snap='near'), snap="near")
 #DEM <- DEM1
@@ -40,14 +34,17 @@ viewSetup(ANTS.df,DEM)
 
 # ------ Calculating viewshed for all Antennas serial version --------------------
 ANTlist <-as.character(ANTS.df$ID)
-ANTlist <-ANTlist[24:42]
+# ANTlist <-ANTlist[24:42]
 # ANTlist <- c("7","8","33")
-transAlts <-  c(2, 5) # c(-2)# 
-transAlts <-  c(1) # c(-2)# 
+transAlts <-  c(2, 5) 
+# for marine setup:
+#transAlts <-  c(1, -2) 
 Layername <- "Res30Harod_2023May_B2"
-Layername <- "Res30Range05_Tartugas"
-SerialComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist,includeCurv=F,seaLevel = 0) # marine 
+#Layername <- "Res30Range05_Tartugas"
+# for terestrial setups:
 SerialComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist,includeCurv=F) # terrestrial
+# for marine setups:
+# SerialComputeViewShed(layername=Layername,DEM,ANTS.df,transAlts,ANTlist=ANTlist,includeCurv=F,seaLevel = 0) # marine 
 
 # ------ Calculating viewshed for all Antennas parallel version--------------------
 detectCores()
