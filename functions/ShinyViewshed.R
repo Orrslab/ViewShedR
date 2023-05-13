@@ -69,8 +69,9 @@ myAnd2 <- function(LOSLayer1,LOSLayer2)
 
 r_colors <- rgb(t(col2rgb(colors()) / 255))
 names(r_colors) <- colors()
-N_colors <- 100;# 20
-cpal_C <- c(grey.colors(2,start = 0.8,end=1),rainbow(4, start = 0, end =0.2,rev=T),rainbow(N_colors-6, start = 0.6, end =0.8,rev=T))
+N_colors <- 9;# 1000
+# cpal_C <- c(grey.colors(2,start = 0.8,end=1),rainbow(4, start = 0, end =0.2,rev=T),rainbow(N_colors-6, start = 0.6, end =0.8,rev=T))
+cpal_C <- c(grey.colors(2,start = 0.8,end=1),rainbow(4, start = 0, end =0.2,rev=T),rep("#B800FF",4))
 val_C = as.numeric(1:length(cpal_C))
 pal_C = colorNumeric(cpal_C,val_C, na.color = "transparent")
 
@@ -230,6 +231,7 @@ server <- function(input, output, session) {
         {InvalidLayerFlag <- TRUE
         IvalidLayerIdx <<- which(ANTS.df$ID=='999')
         ANTS.df <<- ANTS.df[-IvalidLayerIdx,]
+        ANTS.df <- ANTS.df[-IvalidLayerIdx,]
         }else
         {
         InvLayer <-  LOSLayers[[1]]
@@ -336,11 +338,19 @@ server <- function(input, output, session) {
       output$mymap_C <- renderLeaflet({
         input$recalc_C
         isolate({
+          sumLayers <-  sum(LOSLayers[[ANT_indeces_C()]])
+          maxsumLayers <-  cellStats(sum(LOSLayers[[ANT_indeces_C()]]), "max")
+          # cpal_C <- c(grey.colors(2,start = 0.8,end=1),rainbow(4, start = 0, end =0.2,rev=T),rainbow(N_colors-6, start = 0.6, end =0.8,rev=T))
+          cpal_C <- c(grey.colors(2,start = 0.8,end=1),rainbow(4, start = 0, end =0.2,rev=T),rep("#B800FF",max(0,maxsumLayers-6)))
+          val_C = as.numeric(1:length(cpal_C))
+          pal_C = colorNumeric(cpal_C,val_C, na.color = "transparent")
           leaflet() %>%
             addProviderTiles('Esri.WorldImagery') %>%
-            addRasterImage(sum(LOSLayers[[ANT_indeces_C()]]), colors = pal_C(0:length(ANT_indeces_C())), opacity = 0.5)%>%
+            # addRasterImage(sum(LOSLayers[[ANT_indeces_C()]]), colors = pal_C(0:cellStats(sum(LOSLayers[[ANT_indeces_C()]]), "max")), opacity = 0.5)%>%
+            addRasterImage(sumLayers, colors = pal_C(0:maxsumLayers), opacity = 0.5)%>%
             addRasterImage(LOSLayers[[IvalidLayerIdx]], colors = cpal_inv, opacity = 0.8) %>%
-            addLegend(colors = pal_C(0:length(ANT_indeces_C())),labels =(0:length(ANT_indeces_C())), title = "Number of Antenas")%>%
+            # addLegend(colors = pal_C(0:length(ANT_indeces_C())),labels =(0:cellStats(sum(LOSLayers[[ANT_indeces_C()]]), "max")), title = "Number of Antenas")%>%
+            addLegend(colors = pal_C(0:maxsumLayers),labels =(0:maxsumLayers), title = "Number of Antenas")%>%
             addMarkers(data=ANTS.df[ANT_indeces_C(),], icon = ~ IconsVis[[2]],
                        popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID[ANT_indeces_C()]),",",ANTS.df$ANTName[ANT_indeces_C()])))%>%
             addCircles(data=ANTS.df[ANT_indeces_C(),], weight = 5, fillOpacity = 1,color = "red",
@@ -464,7 +474,7 @@ server <- function(input, output, session) {
           xyzline$DEM <- LineDEM
           xyzline$DEMCurved <- LineDEM-xyzline$dist^2/2/earthRadius
           # hightProfile <<- xyzline
-          vis=ifelse(any(xyzline$z < xyzline$DEM, na.rm = TRUE),"red","green")
+          vis=ifelse(any(xyzline$z < xyzline$DEM, na.rm = TRUE),"purple","green")
           if(considerCurve)
             vis=ifelse(any(xyzline$z < xyzline$DEMCurved, na.rm = TRUE),"red","green")
           DEMbox <- data.frame(LON=c(min(LOSline[,1]-input$DEMshoulders/111000),max(LOSline[,1]+input$DEMshoulders/111000)),
@@ -507,7 +517,7 @@ server <- function(input, output, session) {
               addLegend(pal = pal, values = DEM_tight@data@values,  title = "Elevation") %>% 
               addCircles(data=ANTS.df, weight = 5, fillOpacity = 1,color = "red",
                          popup = ~htmlEscape(paste0("ID=",as.character(ANTS.df$ID),",",ANTS.df$ANTName)))%>%
-              addCircles(data=xyzline, weight = 3, fillOpacity = 1,color = "green",
+              addCircles(data=xyzline, weight = 3, fillOpacity = 1,color = vis,
                          popup = ~htmlEscape(paste0("DEM=",as.character(round(xyzline$DEM,1)),
                                                     ", LOSline=",as.character(round(xyzline$z,1)),
                                                     ", LAT=",as.character(round(xyzline$LAT,3)),
